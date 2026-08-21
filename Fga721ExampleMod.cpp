@@ -7,6 +7,7 @@
 #include "Logging.h"
 #include "MemUtils.h"
 #include "SexyTypes.h"
+#include "Board.h"
 #include "Fga721ExampleMod.h"
 
 // PlantNameMapper: permite crear nuevos ids de plantas
@@ -47,7 +48,7 @@ void* hkCreateZombieTypenameMap(ZombieAlmanac* self)
     return self;
 }
 
-// TEMP del softcode del zombie piano
+// Softcode del zombie piano
 
 typedef bool (*initZombiePianoList)(int64, int64);
 initZombiePianoList oInitZombiePianoList = NULL;
@@ -74,14 +75,87 @@ bool hkInitZombiePianoList(int64 a1, int64 a2)
     return result;
 }
 
+// memoria de momia
+
+uint64 oCamelZombieFunc = NULL;
+
+typedef void(*camelMinigameModuleFunc)(int64, int64, char);
+camelMinigameModuleFunc cmmFunc = (camelMinigameModuleFunc)Fga721GetActualOffset(0xAC4638);
+
+void* vftable;
+
+enum class ZombieState_CamelTouch {
+    ZS_CAMELTOUCH_WaitingToRise = 18,
+    ZS_CAMELTOUCH_RisingFromGround = 19,
+    ZS_CAMELTOUCH_Stunned = 20
+};
+
+// Recreamos la clase del zombiecameltouch (muchas gracias a blazey por este codigo)
+
+class ZombieCamelTouch
+{
+public:
+    char pad1[1112];
+    pvztime_t m_riseFromGroundDelay;
+    char pad2[28];
+
+    void EnterState(int state, bool a3)
+    {
+        return CallFunc<void, ZombieCamelTouch*, int, bool>(0xC3D428, this, state, a3);
+    }
+
+    virtual void UpdatePosition(Sexy::SexyVector3* newPos) {};
+
+    static void SpawnFromGround(ZombieCamelTouch* thisPtr, Sexy::SexyVector3* groundPos, int delay);
+};
+
+static_assert(sizeof(ZombieCamelTouch) == 1152);
+static_assert(offsetof(ZombieCamelTouch, m_riseFromGroundDelay) == 1120);
+
+// funcion que hace que el zombie salga del suelo, con un delay y una posicion especifica
+
+void ZombieCamelTouch::SpawnFromGround(ZombieCamelTouch* thisPtr, Sexy::SexyVector3* groundPos, int delay)
+{
+    thisPtr->m_riseFromGroundDelay = delay;
+    thisPtr->UpdatePosition(groundPos);
+    thisPtr->EnterState((int)ZombieState_CamelTouch::ZS_CAMELTOUCH_WaitingToRise, false);
+}
+
+// hacemos que la funcion vaya hasta otra funcion colchon para que almacene la llamada original, primero ejecutamos la funcion de la salida de los camellos del suelo
+
+void hkCamelZombieFunc(int64 a1, int64 a2, char a3)
+{
+	ZombieCamelTouch::SpawnFromGround(reinterpret_cast<ZombieCamelTouch*>(a1), reinterpret_cast<Sexy::SexyVector3*>(a2), a3);
+    cmmFunc(a1, a2, a3);
+}
+
 // Inmunidades del mago y el curandero al encogimiento harcodeadas de forma tonta (no funcionan muy bien porque no encontre los offsets de las inmunidades a encantamenta)
 
 uint64 header;
 
-bool hkMagicianHealerImmuneToShrink(int64_t a1)
+void hkMagicianConditionFunc(int64 a1, int64 condition)
 {
-    // true = Mago y Curandero Inmune al encogimiento
+    return;
+}
+
+bool hkMagicianImmuneToShrink(int64_t a1)
+{
+    // true = Mago Inmune al encogimiento
     return false;
+}
+
+void hkMagicianInitializeFamilyImmunities(int64_t a1, int64_t a2)
+{
+    return;
+}
+
+// Hookeo de zanahoria intensiva
+
+typedef bool (*checkIntensiveCarrotShowPlant)(int64, int64);
+checkIntensiveCarrotShowPlant oCheckIntensiveCarrotShowPlant = NULL;
+
+bool hkCheckIntensiveCarrotShowPlant(int64 r0_0, int64 plant) {
+    return oCheckIntensiveCarrotShowPlant(r0_0, plant);
 }
 
 __attribute__((constructor))
@@ -90,9 +164,14 @@ void libFga721_main()
     // incializar hooks
     Fga721HookFunction(0x11797B4, (void*)hkCreatePlantNameMapper, (void**)&oPlantNameMapperCtor);
     Fga721HookFunction(0x14665C4, (void*)hkCreateZombieTypenameMap, (void**)&oZombieAlmanacCtor);
+    Fga721HookFunction(0xB18DC4, (void*)hkCamelZombieFunc, (void**)&oCamelZombieFunc);
     Fga721HookFunction(0xC1D1FC, (void*)hkInitZombiePianoList, (void**)&oInitZombiePianoList);
-    Fga721HookFunction(0xC12B7C, (void*)hkMagicianHealerImmuneToShrink, (void**)&header);
-    Fga721HookFunction(0xC0F91C, (void*)hkMagicianHealerImmuneToShrink, (void**)&header);
+    Fga721HookFunction(0xBF7BD4, (void*)hkMagicianConditionFunc, (void**)&header);
+    Fga721HookFunction(0xC12B7C, (void*)hkMagicianImmuneToShrink, (void**)&header);
+    Fga721HookFunction(0xBF7BEC, (void*)hkMagicianInitializeFamilyImmunities, (void**)&header);
+    Fga721HookFunction(0xE431C4, (void*)hkCheckIntensiveCarrotShowPlant, (void**)&oCheckIntensiveCarrotShowPlant);
+    // Fga721HookFunction(0xBD873C, (void*)hkHealerConditionFunc, (void**)&header);
+    // Fga721HookFunction(0xC0F91C, (void*)hkHealerImmuneToShrink, (void**)&header);
 
     LOGI("Finished initializing");
 }
