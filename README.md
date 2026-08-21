@@ -4,9 +4,11 @@ this library has the propuse of be a start point for the people who doesnt know 
 
 ## Features
 this lib has features for modders, like:
-* PlantNameMapper and ZombieAlmanac for add new integerids!
+* PlantNameMapper and ZombieAlmanac for add new IntegerIDs!
 * Piano Softcode: You can put new zombies for dance with the piano!
-* Healer and Magician Inmunities to shrink softcoded! (It didnt work with healer, so idk)
+* Mummy Memory Fix Ported To Arm64!
+* Magician Inmunities to shrink softcoded!
+* Intensive Carrot Dumb Hook Test!
 
 ## Future Plans
 * ask Blazey for help to improve the library
